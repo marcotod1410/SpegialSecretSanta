@@ -11,6 +11,7 @@ from getpass import getpass
 
 filename = "spegial-secret-santa.json"
 
+
 def load_data_from_file():
     if exists(filename):
         with open(filename, "r") as f:
@@ -32,7 +33,7 @@ def load_data_from_file():
 
 def save_data_to_file(content):
     with open(filename, "w") as f:
-        f.write(json.dumps(content))
+        f.write(json.dumps(content, sort_keys=True, indent=4))
         print("File salvato")
 
 
@@ -66,6 +67,16 @@ def show_players(content):
     for player in content['players']:
         print(player['id'], player['name'], player['email'])
 
+        has_rules = False
+        for rule in content['rules']:
+            if rule['player_from'] == player['id']:
+                player_to = find_player_by_id(content, rule['player_to'])
+                print("\tNon fa il regalo a:", player_to['name'])
+                has_rules = True
+
+        if not has_rules:
+            print("\tFa il regalo a tutti")
+
 
 def find_player_by_id(content, id):
     for player in content['players']:
@@ -76,21 +87,30 @@ def find_player_by_id(content, id):
     return None
 
 
+def find_player_by_name(content, name):
+    for player in content['players']:
+        if player['name'] == name:
+            return player
+
+    print("Non ho trovato nessun giocatore con nome", name)
+    return None
+
+
 def add_rule(content):
-    id = int(input("Scegli giocatore:"))
-    player = find_player_by_id(content, id)
+    name = input("Scegli giocatore:")
+    player = find_player_by_name(content, name)
     if player is None:
         return
 
-    present_to_id = int(input("Inserisci giocatore verso cui scrivere la regola:"))
-    player_present = find_player_by_id(content, id)
+    present_to_name = input("Inserisci giocatore verso cui scrivere la regola:")
+    player_present = find_player_by_name(content, present_to_name)
 
     if player_present is None:
         return
 
     existing_rule = None
     for rule in content['rules']:
-        if rule['player_from'] == id and rule['player_to'] == present_to_id:
+        if rule['player_from'] == player['id'] and rule['player_to'] == player_present['id']:
             existing_rule = rule
             break
 
@@ -104,8 +124,8 @@ def add_rule(content):
         sn = input("Procedo? [S/N]")
         if sn == "S":
             content['rules'].append({
-                'player_from': id,
-                'player_to': present_to_id
+                'player_from': player['id'],
+                'player_to': player_present['id']
             })
 
 
@@ -158,7 +178,7 @@ def extraction(content):
         'extraction': encoded_extraction.decode('utf-8')
     })
 
-    print("Estrazione ok con id ", extraction_id)
+    print("Estrazione ok con id ", extraction_id, encoded_extraction)
 
 
 def send_email(content):
@@ -234,6 +254,10 @@ def send_email_to_player(content, player, extr, sender, password):
         print("Email inviata con successo a ", player['email'])
 
 
+def delete_extractions(content):
+    content['extractions'] = []
+
+
 def start():
     print("Hello SpeGial Secret Santa")
     print()
@@ -252,6 +276,7 @@ def start():
         print("5. Esegui estrazione")
         print("6. Avvisa giocatore")
         print("7. Avvisa tutti i giocatori")
+        print("8. Cancella estrazioni")
         print("0. Esci")
 
         choice = int(input("Scelta:"))
@@ -269,6 +294,8 @@ def start():
             send_email(content)
         elif choice == 7:
             send_email_all(content)
+        elif choice == 8:
+            delete_extractions(content)
         elif choice == 0:
             print("Buon speGial secret santa")
             choice_quit = True
