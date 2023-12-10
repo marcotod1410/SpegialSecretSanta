@@ -237,13 +237,19 @@ def send_email_to_player(content, player, extr, sender, password):
             player_to = find_player_by_id(content, assignment['present_to_id'])
             break
 
-    msg = MIMEText("Ciao " + player['name'] + ". Sono il babbo natale spegiale. \n" +
+    msg = MIMEText("Ciao " + player['name'] + ". Sono di nuovo il babbo natale spegiale. \n" +
+                   "Questa è la mail di estrazione ufficiale per l'anno 2023. Alcune regole: \n\n"
+                   "1. Non dire a nessuno chi ti è appena capitato\n" +
+                   "2. Spendi 10 euro al massimo per il regalo\n" +
+                   "3. Non rispondere a questa mail\n" +
+                   "4. Sii originale e divertiti!!\n\n" +
+                   "E ora il risultato dell'estrazione...\n\n"
                    "A te è capitato da fare il regalo a: \n\n" +
                    player_to['name'] + "\n\n" +
                    "Buon divertimento!!!\n\n" +
                    "Codice estrazione: " + extr['extraction'])
 
-    msg['Subject'] = "Spegial Secret Santa"
+    msg['Subject'] = "Spegial Secret Santa ufficiale 2023"
     msg['From'] = sender
     msg['To'] = player['email']
 
