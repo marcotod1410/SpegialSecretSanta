@@ -136,6 +136,7 @@ def extraction(content):
 
     ok = False
     players_shuffled = random.sample(content['players'], len(content['players']))
+    rules = get_extraction_rules(content)
 
     while not ok:
         ok = True
@@ -148,7 +149,7 @@ def extraction(content):
             if present_from_id == present_to_id:
                 ok = False
 
-            for rule in content['rules']:
+            for rule in rules:
                 if rule['player_from'] == present_from_id and rule['player_to'] == present_to_id:
                     ok = False
 
@@ -173,12 +174,43 @@ def extraction(content):
 
     extraction_id = extraction_id + 1
 
+    name = input("Dai un nome all'estrazione:")
+
     content['extractions'].append({
         'id': extraction_id,
+        'name': name,
         'extraction': encoded_extraction.decode('utf-8')
     })
 
-    print("Estrazione ok con id ", extraction_id, encoded_extraction)
+    print("Estrazione ok con id", extraction_id, encoded_extraction)
+
+
+def get_extraction_rules(content):
+    key = content['key'].encode('utf-8')
+    fernet = Fernet(key)
+
+    rules = []
+
+    for rule in content['rules']:
+        rules.append(rule)
+
+    for extr in content['extractions']:
+        decrypted_extraction = json.loads(fernet.decrypt(extr['extraction']).decode())
+
+        for assignment in decrypted_extraction:
+            rule_existing = False
+            for existing_rule in rules:
+                if existing_rule['player_from'] == assignment['present_from_id'] and existing_rule['player_to'] == assignment['present_to_id']:
+                    rule_existing = True
+                    break
+
+            if not rule_existing:
+                rules.append({
+                    'player_from': assignment['present_from_id'],
+                    'player_to': assignment['present_to_id']
+                })
+
+    return rules
 
 
 def send_email(content):
@@ -192,6 +224,8 @@ def send_email(content):
     if extr is None:
         print("Nessuna estrazione trovata")
         return
+
+    print('Trovata estrazione con id', extraction_id, 'e nome', extr['name'])
 
     id = int(input("Scegli giocatore:"))
     player = find_player_by_id(content, id)
@@ -217,6 +251,8 @@ def send_email_all(content):
         print("Nessuna estrazione trovata")
         return
 
+    print('Trovata estrazione con id', extraction_id, 'e nome', extr['name'])
+
     sender = input("Indirizzo email di invio: ")
     password = getpass("Inserisci password email per l'invio: ")
 
@@ -238,13 +274,13 @@ def send_email_to_player(content, player, extr, sender, password):
             break
 
     msg = MIMEText("Ciao " + player['name'] + ". Sono di nuovo il babbo natale spegiale. \n" +
-                   "Questa è la mail di estrazione ufficiale per l'anno 2023. Alcune regole: \n\n"
+                   "Questa è la mail di estrazione ufficiale per l'anno 2024 \""+extr['name']+"\". Alcune regole: \n\n"
                    "1. Non dire a nessuno chi ti è appena capitato\n" +
                    "2. Spendi 10 euro al massimo per il regalo\n" +
                    "3. Non rispondere a questa mail\n" +
                    "4. Sii originale e divertiti!!\n\n" +
                    "E ora il risultato dell'estrazione...\n\n"
-                   "A te è capitato da fare il regalo a: \n\n" +
+                   "Devi fare il regalo a: \n\n" +
                    player_to['name'] + "\n\n" +
                    "Buon divertimento!!!\n\n" +
                    "Codice estrazione: " + extr['extraction'])
