@@ -5,9 +5,9 @@ import json
 import random
 import smtplib
 from email.mime.text import MIMEText
-import base64
 from cryptography.fernet import Fernet
 from getpass import getpass
+import hashlib
 
 filename = "spegial-secret-santa.json"
 
@@ -145,16 +145,15 @@ def extraction(content):
     # this algo is a brute force over players and will be *very* inefficient as years go by
     # todo: replace it with a CSP-style algorithm
 
+    attempts = 0
     while not ok:
         ok = True
         players_shuffled = random.sample(players, len(players))
+        attempts += 1
 
         for i in range(0, len(players_shuffled)):
             present_from_id = players[i]['id']
             present_to_id = players_shuffled[i]['id']
-
-            if present_from_id == present_to_id:
-                ok = False
 
             for rule in rules:
                 if rule['player_from'] == present_from_id and rule['player_to'] == present_to_id:
@@ -183,15 +182,22 @@ def extraction(content):
 
     name = input("Dai un nome all'estrazione:")
     test = input("Scrivi T se questa estrazione è di test:")
+    is_test = test == "T"
 
     content['extractions'].append({
         'id': extraction_id,
         'name': name,
         'extraction': encoded_extraction.decode('utf-8'),
-        'test': test == "T"
+        'test': is_test
     })
 
-    print("Estrazione ok con id", extraction_id, encoded_extraction)
+    if is_test:
+        print("Rivelazione estrazione TEST")
+        reveal(content, result)
+
+    hash = hashlib.md5(encoded_extraction)
+
+    print("Estrazione ok con tentativi:", attempts, ", id", extraction_id, ",hash", hash.hexdigest())
 
 
 def get_extraction_rules(content):
@@ -200,13 +206,20 @@ def get_extraction_rules(content):
 
     rules = []
 
+    for player in content['players']:
+        rules.append({
+            'player_from': player['id'],
+            'player_to': player['id']
+        })
+
     for rule in content['rules']:
         rules.append(rule)
 
     for extr in content['extractions']:
+        if 'test' in extr and extr['test']:
+            continue
+
         decrypted_extraction = json.loads(fernet.decrypt(extr['extraction']).decode())
-        if 'test' in decrypted_extraction and decrypted_extraction['test']:
-            pass
 
         for assignment in decrypted_extraction:
             rule_existing = False
@@ -222,6 +235,14 @@ def get_extraction_rules(content):
                 })
 
     return rules
+
+
+def reveal(content, extraction):
+    for assignment in extraction:
+        player_from = find_player_by_id(content, assignment['present_from_id'])
+        player_to = find_player_by_id(content, assignment['present_to_id'])
+
+        print(player_from['name'], "->", player_to['name'])
 
 
 def send_email(content):
@@ -274,6 +295,7 @@ def send_email_all(content):
 def send_email_to_player(content, player, extr, sender, password):
     key = content['key'].encode('utf-8')
     fernet = Fernet(key)
+    extraction_hash = hashlib.md5(extr['extraction'].encode('utf-8')).hexdigest()
 
     decrypted_extraction = json.loads(fernet.decrypt(extr['extraction']).decode())
 
@@ -297,7 +319,7 @@ def send_email_to_player(content, player, extr, sender, password):
                    "Devi fare il regalo a: \n\n" +
                    player_to['name'] + "\n\n" +
                    "Buon divertimento!!!\n\n" +
-                   "Codice estrazione: " + extr['extraction'])
+                   "Codice estrazione: " + extraction_hash)
 
     msg['Subject'] = "Spegial Secret Santa "+is_test+" "+year
     msg['From'] = sender
