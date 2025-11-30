@@ -131,6 +131,85 @@ def add_rule(content):
             })
 
 
+def try_extraction(all_players, rules, result):
+    # CSP-style algorithm for finding a potential assignment for all the players while agreeing to the constraints
+    # in input (rules)
+
+    # if assignments are completed, there's no need to go beyond
+    if len(result) == len(all_players):
+        return True
+
+    # choose a player which has not an assignment yet
+    player_from = None
+    for player in all_players:
+        assignment_found = False
+        for assignment in result:
+            if assignment['present_from_id'] == player['id']:
+                assignment_found = True
+                break
+
+        if not assignment_found:
+            player_from = player
+            break
+
+    # for the selected player, find all available players that can receive the present from it
+    available_players = []
+
+    for player_to in all_players:
+
+        # discard players that are already recipient of a present
+        assignment_found = False
+        for assignment in result:
+            if assignment['present_to_id'] == player_to['id']:
+                assignment_found = True
+                break
+
+        if assignment_found:
+            continue
+
+        # discard players that match a specific constraint
+        assignment_ok = True
+        for rule in rules:
+            if rule['player_from'] == player_from['id'] and rule['player_to'] == player_to['id']:
+                assignment_ok = False
+                break
+
+        if not assignment_ok:
+            continue
+
+        available_players.append(player_to)
+
+    # shuffle available players.
+    # not strictly necessary per se, but it helps reducing situations in which several couples of players make gifts to
+    # each other, due to the nature of the algorithm
+
+    available_players_shuffled = random.sample(available_players, len(available_players))
+
+    for player_to in available_players_shuffled:
+
+        # try making this assignment
+        result.append({
+            'present_from_id': player_from['id'],
+            'present_to_id': player_to['id']
+        })
+
+        # proceeed with another player on the list, recursively
+        res = try_extraction(all_players, rules, result)
+
+        # if the extraction is complete, there's no need to go further!
+        if res:
+            return True
+
+        # else, delete the freshly made assignment and try with another player
+        result.pop()
+
+    # if here, no solution exist for this problem and this set of constraints
+    # Time to delete all the extractions and start the Secret Santa all over again!!
+    return False
+
+
+
+
 def extraction(content):
     if len(content['players']) <= 1:
         print("Aggiungi più giocatori per eseguire l'estrazione!")
@@ -143,31 +222,13 @@ def extraction(content):
     rules = get_extraction_rules(content)
 
     # this algo is a brute force over players and will be *very* inefficient as years go by
-    # todo: replace it with a CSP-style algorithm
-
-    attempts = 0
-    while not ok:
-        ok = True
-        players_shuffled = random.sample(players, len(players))
-        attempts += 1
-
-        for i in range(0, len(players_shuffled)):
-            present_from_id = players[i]['id']
-            present_to_id = players_shuffled[i]['id']
-
-            for rule in rules:
-                if rule['player_from'] == present_from_id and rule['player_to'] == present_to_id:
-                    ok = False
 
     result = []
-    for i in range(0, len(players_shuffled)):
-        present_from_id = players[i]['id']
-        present_to_id = players_shuffled[i]['id']
+    extraction_result = try_extraction(players_shuffled, rules, result)
 
-        result.append({
-            'present_from_id': present_from_id,
-            'present_to_id': present_to_id
-        })
+    if not extraction_result:
+        print("Non è stato possibile eseguire un'estrazione!")
+        return
 
     key = content['key'].encode('utf-8')
     fernet = Fernet(key)
@@ -197,7 +258,7 @@ def extraction(content):
 
     hash = hashlib.md5(encoded_extraction)
 
-    print("Estrazione ok con tentativi:", attempts, ", id", extraction_id, ",hash", hash.hexdigest())
+    print("Estrazione ok: id", extraction_id, "hash", hash.hexdigest())
 
 
 def get_extraction_rules(content):
@@ -306,13 +367,16 @@ def send_email_to_player(content, player, extr, sender, password):
             player_to = find_player_by_id(content, assignment['present_to_id'])
             break
 
+    if player_to is None:
+        return
+
     year = str(datetime.datetime.now().year)
-    is_test = "TEST" if 'test' in decrypted_extraction and decrypted_extraction['test'] else "UFFICIALE"
+    is_test = "TEST" if 'test' in extr and extr['test'] else "UFFICIALE"
 
     msg = MIMEText("Ciao " + player['name'] + ". Sono di nuovo il babbo natale spegiale. \n" +
                    "Questa è la mail di estrazione per l'anno "+year+" \""+extr['name']+"\". Alcune regole: \n\n"
                    "1. Non dire a nessuno chi ti è appena capitato\n" +
-                   "2. Non regalare un iPod\n" +
+                   "2. Tieni un budget orientativo di 10 euro\n" +
                    "3. Non rispondere a questa mail\n" +
                    "4. Sii originale e divertiti!!\n\n" +
                    "E ora il risultato dell'estrazione...\n\n"
